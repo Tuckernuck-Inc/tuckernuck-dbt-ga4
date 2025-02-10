@@ -20,8 +20,10 @@
 with 
 source as (
     select _table_suffix 
-    from {{ source('ga4', 'events') }})
-    where (_table_suffix not like '%\\_%' or _table_suffix like '%fresh\\_%'
+    from {{ source('ga4', 'events') }}
+    where 
+        (_table_suffix not like '%\\_%' or _table_suffix like '%fresh\\_%')
+        and cast(right(_table_suffix, 8) as int64) >= {{var('start_date')}}
     {% if is_incremental() %}
         -- this filter will only be applied on an incremental run
         and parse_date('%Y%m%d', right(_table_suffix, 8)) in ({{ partitions_to_replace | join(',') }})
@@ -33,7 +35,6 @@ standard_partitions as (
     from source
     where 
         _table_suffix not like '%\\_%'
-        and cast(right(_table_suffix, 8) as int64) >= {{var('start_date')}}
 ),
 
 fresh_partitions as (
@@ -54,9 +55,15 @@ source_deduped as (
     select
         {{ ga4.base_select_source() }}
     from {{ source('ga4', 'events') }}
-    where _table_suffix in (
-        select _table_suffix from clean_table_suffix_list
-    )
+    where  
+        (_table_suffix not like '%\\_%' or _table_suffix like '%fresh\\_%')
+        and cast(right(_table_suffix, 8) as int64) >= {{var('start_date')}}
+
+    {% if is_incremental() %}
+        -- this filter will only be applied on an incremental run
+        and parse_date('%Y%m%d', right(_table_suffix, 8)) in ({{ partitions_to_replace | join(',') }})
+    {% endif %}
+
 ),
 
 renamed as (
