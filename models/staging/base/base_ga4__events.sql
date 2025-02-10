@@ -18,7 +18,15 @@
 }}
 
 with 
-source as (select *, _table_suffix from {{ source('ga4', 'events') }}),
+source as (
+    select _table_suffix 
+    from {{ source('ga4', 'events') }})
+    where (_table_suffix not like '%\\_%' or _table_suffix like '%fresh\\_%'
+    {% if is_incremental() %}
+        -- this filter will only be applied on an incremental run
+        and parse_date('%Y%m%d', right(_table_suffix, 8)) in ({{ partitions_to_replace | join(',') }})
+    {% endif %}
+),
 
 standard_partitions as (
     select distinct _table_suffix
@@ -49,9 +57,6 @@ source_deduped as (
     where _table_suffix in (
         select _table_suffix from clean_table_suffix_list
     )
-    {% if is_incremental() %}
-        and parse_date('%Y%m%d', right(_table_suffix, 8)) in ({{ partitions_to_replace | join(',') }})
-    {% endif %}
 ),
 
 renamed as (
